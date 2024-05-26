@@ -13,8 +13,8 @@ def build_vocab(dataset):
 
 
 def data_process(dt):
-    return [torch.tensor([v["<bos>"]] + [v[token] for token in document] + [v["<eos>"]], dtype=torch.long)
-            for document in dt]
+    return [torch.tensor([vocabulary["<bos>"]] + [vocabulary[token] for token in document] + [vocabulary["<eos>"]],
+                         dtype=torch.long) for document in dt]
 
 
 def labels_process(dt):
@@ -74,102 +74,103 @@ def eval_model(dataset_tokens, dataset_labels, model):
     return get_scores(Y_true, Y_pred)
 
 
+def get_y_pred(tokens):
+    y_pred = []
+    for j in tqdm(range(len(tokens))):
+        tok = lstm_model(tokens[j])
+        idx = torch.argmax(tok, 1)
+        lst = list(idx.numpy())
+        y_pred.append(lst)
+    return y_pred
+
+
+def y_pred_to_labels(y_pred):
+    labels = []
+    for record in y_pred:
+        rec_labels = []
+        for num in record:
+            label = None
+            for a, b in label_vocab.items():
+                if num == b:
+                    label = a
+            rec_labels.append(label)
+        labels.append(rec_labels)
+        del rec_labels[0]
+        del rec_labels[-1]
+    return labels
+
+
 train_data = pd.read_csv('train/train.tsv', sep='\t', names=["labels", "texts"], header=None)
 validation_data = pd.read_csv('dev-0/in.tsv', sep='\t', names=["texts"], header=None)
+validation_data_labels = pd.read_csv('dev-0/expected.tsv', sep='\t', names=["labels"], header=None)
 test_data = pd.read_csv('test-A/in.tsv', sep='\t', names=["texts"], header=None)
 
-train_words = []
-for tekst in train_data["texts"]:
-    pom = []
-    for slowo in tekst.split(" "):
-        pom.append(slowo.lower())
-    train_words.append(pom)
+train_words_split = []
+for text in train_data["texts"]:
+    row = []
+    for word in text.split(" "):
+        row.append(word)
+    train_words_split.append(row)
 
-validation_words = []
-for tekst in validation_data["texts"]:
-    pom = []
-    for slowo in tekst.split(" "):
-        pom.append(slowo.lower())
-    validation_words.append(pom)
+validation_words_split = []
+for text in validation_data["texts"]:
+    row = []
+    for word in text.split(" "):
+        row.append(word)
+    validation_words_split.append(row)
 
-test_words = []
-for tekst in test_data["texts"]:
-    pom = []
-    for slowo in tekst.split(" "):
-        pom.append(slowo.lower())
-    test_words.append(pom)
-
-
-v = build_vocab(train_words)
-v.set_default_index(v["<unk>"])
-itos = v.get_itos()
-print(len(itos))
-print(itos)
+test_words_split = []
+for text in test_data["texts"]:
+    row = []
+    for word in text.split(" "):
+        row.append(word)
+    test_words_split.append(row)
 
 
-etykieta_na_kod = {}
-licznik = 0
-for tekst in train_data["labels"]:
-    for etykieta in tekst.split(" "):
-        if etykieta not in etykieta_na_kod:
-            etykieta_na_kod[etykieta] = licznik
-            licznik += 1
-print(etykieta_na_kod)
+vocabulary = build_vocab(train_words_split)
+vocabulary.set_default_index(vocabulary["<unk>"])
+itos = vocabulary.get_itos()
 
 
-kody_etykiet_train = []
-for tekst in train_data["labels"]:
-    pom = []
-    for etykieta in tekst.split(" "):
-        pom.append(etykieta_na_kod[etykieta])
-    kody_etykiet_train.append(pom)
-print(kody_etykiet_train[0])
-
-# odczytaj etykiety dev-0
-labels_dev0 = pd.read_csv('dev-0/expected.tsv', sep='\t')
-labels_dev0.columns = ["y"]
-print(labels_dev0["y"][0])
-
-# podziel etykiety
-kody_etykiet_dev0 = []
-for tekst in labels_dev0["y"]:
-    pom = []
-    for etykieta in tekst.split(" "):
-        pom.append(etykieta_na_kod[etykieta])
-    kody_etykiet_dev0.append(pom)
-print(kody_etykiet_dev0[0])
+label_vocab = {}
+count = 0
+for text in train_data["labels"]:
+    for label in text.split(" "):
+        if label not in label_vocab:
+            label_vocab[label] = count
+            count += 1
 
 
-train_tokens_ids = data_process(train_words)
-test_dev0_tokens_ids = data_process(validation_words)
-test_A_tokens_ids = data_process(test_words)
+labels_train_data = []
+for text in train_data["labels"]:
+    row = []
+    for label in text.split(" "):
+        row.append(label_vocab[label])
+    labels_train_data.append(row)
 
-train_labels = labels_process(kody_etykiet_train)
-test_dev0_labels = labels_process(kody_etykiet_dev0)
-
-
-print(len(train_tokens_ids), len(train_tokens_ids[0]))
-print(len(test_dev0_tokens_ids), len(test_dev0_tokens_ids[0]))
-print(len(test_A_tokens_ids), len(test_A_tokens_ids[0]))
-
-print(train_tokens_ids[0])
-print(test_dev0_tokens_ids[0])
-print(test_A_tokens_ids[0])
-
-print(len(train_labels), len(train_labels[0]))
-print(len(test_dev0_labels), len(test_dev0_labels[0]))
-
-print(train_labels[0])
-print(test_dev0_labels[0])
+labels_validation_data = []
+for text in validation_data_labels["labels"]:
+    row = []
+    for label in text.split(" "):
+        row.append(label_vocab[label])
+    labels_validation_data.append(row)
 
 
-num_tags = len(etykieta_na_kod.keys())
+train_tokens_ids = data_process(train_words_split)
+validation_tokens_ids = data_process(validation_words_split)
+test_tokens_ids = data_process(test_words_split)
+
+train_labels = labels_process(labels_train_data)
+validation_labels = labels_process(labels_validation_data)
+
+
+num_tags = len(label_vocab.keys())
 
 
 class LSTM(torch.nn.Module):
     def __init__(self):
         super(LSTM, self).__init__()
-        self.emb = torch.nn.Embedding(len(v.get_itos()), 100)
+        self.emb = torch.nn.Embedding(len(vocabulary.get_itos()), 100)
         self.rec = torch.nn.LSTM(100, 256, 1, batch_first=True)
         self.fc1 = torch.nn.Linear(256, num_tags)
 
@@ -180,17 +181,18 @@ class LSTM(torch.nn.Module):
         return out_weights
 
 
-lstm = LSTM()
+lstm_model = LSTM()
 criterion = torch.nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(lstm.parameters())
-NUM_EPOCHS = 5
-for i in range(NUM_EPOCHS):
-    lstm.train()
-    for i in tqdm(range(len(train_labels))):
-        batch_tokens = train_tokens_ids[i].unsqueeze(0)
-        tags = train_labels[i].unsqueeze(1)
+optimizer = torch.optim.Adam(lstm_model.parameters())
+NUM_EPOCHS = 10
 
-        predicted_tags = lstm(batch_tokens)
+for i in range(NUM_EPOCHS):
+    lstm_model.train()
+    for k in tqdm(range(len(train_labels))):
+        batch_tokens = train_tokens_ids[k].unsqueeze(0)
+        tags = train_labels[k].unsqueeze(1)
+
+        predicted_tags = lstm_model(batch_tokens)
 
         optimizer.zero_grad()
         loss = criterion(predicted_tags.squeeze(0), tags.squeeze(1))
@@ -198,16 +200,22 @@ for i in range(NUM_EPOCHS):
         loss.backward()
         optimizer.step()
 
-    lstm.eval()
+    lstm_model.eval()
+    print(eval_model(validation_tokens_ids, validation_labels, lstm_model))
 
 
-scores_dev_0 = eval_model(test_dev0_tokens_ids, test_dev0_labels, lstm)
+print(eval_model(validation_tokens_ids, validation_labels, lstm_model))
 
-print(scores_dev_0)
+# (0.9501402247360199, 0.9508740204942736, 0.9505069809917434)
 
-# output = pd.DataFrame({'predicted_label': [' '.join(map(str, row)) for row in Y_pred_dev_0]})
-# output.to_csv("dev-0/out.tsv", sep='\t', index=False, header=False)
-#
-# output2 = pd.DataFrame({'predicted_label': [' '.join(map(str, row)) for row in Y_pred_testA]})
-# output2.to_csv("test-A/out.tsv", sep='\t', index=False, header=False)
+y_pred_validation = get_y_pred(validation_tokens_ids)
+y_pred_validation_labels = y_pred_to_labels(y_pred_validation)
 
+output = pd.DataFrame({'predicted_label': [' '.join(map(str, row)) for row in y_pred_validation_labels]})
+output.to_csv("dev-0/out.tsv", sep='\t', index=False, header=False)
+
+y_pred_test = get_y_pred(test_tokens_ids)
+y_pred_test_labels = y_pred_to_labels(y_pred_test)
+
+output2 = pd.DataFrame({'predicted_label': [' '.join(map(str, row)) for row in y_pred_test_labels]})
+output2.to_csv("test-A/out.tsv", sep='\t', index=False, header=False)
